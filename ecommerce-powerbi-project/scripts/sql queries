@@ -1,0 +1,116 @@
+CREATE TEMPORARY TABLE staging_categories (
+    event_time TIMESTAMP,
+    event_type TEXT,
+    product_id BIGINT,
+    category_id BIGINT,
+    category_code TEXT,
+    brand TEXT,
+    price NUMERIC,
+    user_id BIGINT,
+    user_session TEXT
+);
+
+SELECT DISTINCT sc.brand
+FROM staging_categories sc
+LEFT JOIN brands b ON sc.brand = b.brand_name
+WHERE b.brand_id IS NULL; 
+
+SELECT DISTINCT sc.brand
+FROM staging_categories sc
+LEFT JOIN brands b ON sc.brand = b.brand_name
+WHERE (b.brand_id IS NULL OR sc.brand IS NULL OR sc.brand = '')
+
+INSERT INTO products (product_id, category_id, brand_id, price)
+SELECT DISTINCT 
+    sc.product_id,               -- Select product_id
+    sc.category_id,              -- Select category_id from staging_categories
+    b.brand_id,                  -- Get brand_id from brands table
+    sc.price                     -- Select price from staging_categories
+FROM staging_categories sc
+JOIN brands b ON sc.brand = b.brand_name  -- Join with brands table to get the correct brand_id
+JOIN categories c ON sc.category_id = c.category_id  -- Join with categories table to ensure valid category_id
+WHERE sc.product_id IS NOT NULL
+  AND sc.brand IS NOT NULL
+  AND sc.brand <> 'nan'         -- Exclude 'nan' values for brand
+  AND sc.brand <> ''            -- Exclude empty brand values
+  AND sc.category_id IS NOT NULL -- Ensure valid category_id
+ON CONFLICT (product_id) DO NOTHING;
+
+INSERT INTO fact_events (event_time, event_type, product_id, user_id, session_id, price)
+SELECT 
+    sc.event_time,               -- Event timestamp
+    sc.event_type,               -- Event type (view, cart, purchase)
+    p.product_id,                -- Product ID from the products table
+    u.user_id,                   -- User ID from the users table
+    s.session_id,                -- Session ID from the sessions table
+    sc.price                     -- Price from the staging_categories (or adjusted if needed)
+FROM staging_categories sc
+JOIN products p ON sc.product_id = p.product_id           -- Join products table to get product_id
+JOIN categories c ON sc.category_id = c.category_id       -- Join categories table to get category_id
+JOIN users u ON sc.user_id = u.user_id                    -- Join users table to get user_id
+JOIN sessions s ON sc.user_session::uuid = s.session_id  -- Explicitly cast user_session to uuid
+WHERE sc.product_id IS NOT NULL
+  AND sc.user_id IS NOT NULL
+  AND sc.user_session IS NOT NULL
+  AND sc.category_id IS NOT NULL
+  AND sc.event_time IS NOT NULL
+  AND sc.event_type IS NOT NULL
+  AND sc.event_type IN ('view', 'cart', 'purchase')  -- Ensure event type is one of the allowed values
+ON CONFLICT (event_id)  DO NOTHING;
+
+
+COPY staging_categories
+FROM 'C:/ecommerce-powerbi-project/Data/2019-Oct.csv'
+DELIMITER ',' 
+CSV HEADER
+QUOTE '"';
+
+COPY staging_categories
+FROM 'C:/ecommerce-powerbi-project/Data/2019-Nov.csv'
+DELIMITER ',' 
+CSV HEADER
+QUOTE '"'
+;
+INSERT INTO sessions (session_id)
+SELECT DISTINCT user_session::uuid AS session_id
+FROM staging_categories
+WHERE user_session IS NOT NULL
+ON CONFLICT (session_id) DO NOTHING;
+
+
+INSERT INTO users (user_id)
+SELECT DISTINCT user_id
+FROM staging_categories
+WHERE user_id IS NOT NULL
+ON CONFLICT (user_id) DO NOTHING;
+
+
+DELETE FROM categories
+WHERE category_code IS NULL OR category_code = '';
+
+
+
+
+WITH rows_to_update AS (
+    SELECT fe.event_id, sc.category_id
+    FROM fact_events fe
+    JOIN staging_categories sc
+      ON fe.event_type = sc.event_type
+     AND fe.product_id = sc.product_id
+     AND fe.user_id = sc.user_id
+     AND fe.session_id = sc.user_session::uuid
+     AND fe.event_time::date = sc.event_time::date
+    WHERE fe.category_id IS NULL
+      AND sc.category_id IS NOT NULL
+    LIMIT 10
+)
+UPDATE fact_events fe
+SET category_id = rtu.category_id
+FROM rows_to_update rtu
+WHERE fe.event_id = rtu.event_id;
+
+SELECT event_id, category_id
+FROM fact_events
+WHERE category_id IS NOT NULL
+ORDER BY event_id DESC
+LIMIT 10;

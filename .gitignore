@@ -1,0 +1,6 @@
+*/your-folder-name/*.csv
+*.csv
+*.zip
+*.parquet
+data/
+__pycache__/
