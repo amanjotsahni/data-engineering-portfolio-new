@@ -1,0 +1,93 @@
+CREATE TABLE IF NOT EXISTS public.fact_events_oct_nov
+(
+    event_id integer,
+    event_time timestamp without time zone,
+    event_type character varying(20) COLLATE pg_catalog."default",
+    product_id bigint,
+    user_id bigint,
+    session_id uuid,
+    price numeric(10,2),
+    category_id bigint
+)
+
+
+
+CREATE TABLE IF NOT EXISTS public.fact_events
+(
+    event_id integer NOT NULL DEFAULT nextval('fact_events_event_id_seq'::regclass),
+    event_time timestamp without time zone NOT NULL,
+    event_type character varying(20) COLLATE pg_catalog."default",
+    product_id bigint,
+    user_id bigint,
+    session_id uuid,
+    price numeric(10,2),
+    category_id bigint,
+    CONSTRAINT fact_events_pkey PRIMARY KEY (event_id),
+    CONSTRAINT fact_events_category_id_fkey FOREIGN KEY (category_id)
+        REFERENCES public.categories (category_id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION,
+    CONSTRAINT fact_events_product_id_fkey FOREIGN KEY (product_id)
+        REFERENCES public.products (product_id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION,
+    CONSTRAINT fact_events_session_id_fkey FOREIGN KEY (session_id)
+        REFERENCES public.sessions (session_id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION,
+    CONSTRAINT fact_events_user_id_fkey FOREIGN KEY (user_id)
+        REFERENCES public.users (user_id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION,
+    CONSTRAINT fact_events_event_type_check CHECK (event_type::text = ANY (ARRAY['view'::character varying, 'cart'::character varying, 'purchase'::character varying]::text[]))
+)
+
+
+CREATE TABLE IF NOT EXISTS public.brands
+(
+    brand_id integer NOT NULL DEFAULT nextval('brands_brand_id_seq'::regclass),
+    brand_name character varying(255) COLLATE pg_catalog."default",
+    CONSTRAINT brands_pkey PRIMARY KEY (brand_id),
+    CONSTRAINT brands_brand_name_key UNIQUE (brand_name)
+)
+
+
+
+CREATE TABLE IF NOT EXISTS public.categories
+(
+    category_id bigint NOT NULL,
+    category_code character varying(255) COLLATE pg_catalog."default",
+    CONSTRAINT categories_pkey PRIMARY KEY (category_id),
+    CONSTRAINT categories_category_code_key UNIQUE (category_code)
+)
+
+
+CREATE TABLE IF NOT EXISTS public.products
+(
+    product_id bigint NOT NULL,
+    category_id bigint,
+    brand_id integer,
+    price numeric(10,2),
+    CONSTRAINT products_pkey PRIMARY KEY (product_id),
+    CONSTRAINT products_brand_id_fkey FOREIGN KEY (brand_id)
+        REFERENCES public.brands (brand_id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION,
+    CONSTRAINT products_category_id_fkey FOREIGN KEY (category_id)
+        REFERENCES public.categories (category_id) MATCH SIMPLE
+        ON UPDATE NO ACTION
+        ON DELETE NO ACTION
+)
+
+
+CREATE TABLE IF NOT EXISTS public.sessions
+(
+    session_id uuid NOT NULL,
+    CONSTRAINT sessions_pkey PRIMARY KEY (session_id)
+)
+
+CREATE TABLE IF NOT EXISTS public.users
+(
+    user_id bigint NOT NULL,
+    CONSTRAINT users_pkey PRIMARY KEY (user_id)
+)
