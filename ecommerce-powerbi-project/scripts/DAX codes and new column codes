@@ -1,0 +1,28 @@
+Main Category = 
+LEFT('public categories'[category_code], FIND(".", 'public categories'[category_code] & ".") - 1)
+
+
+event_date = DATE(YEAR('public fact_events_oct_nov'[event_time]), MONTH('public fact_events_oct_nov'[event_time]), DAY('public fact_events_oct_nov'[event_time])
+)
+
+event_month = FORMAT('public fact_events_oct_nov'[event_time], "YYYY-MM")
+##DAX
+Top 3 Category Events = 
+CALCULATE(
+    COUNTROWS('public fact_events_oct_nov'),
+    FILTER(
+        ADDCOLUMNS(
+            ALL('public categories'[category_code]),
+            "EventCount", CALCULATE(COUNTROWS('public fact_events_oct_nov'))
+        ),
+        RANKX(
+            ADDCOLUMNS(
+                ALL('public categories'[category_code]),
+                "EventCount", CALCULATE(COUNTROWS('public fact_events_oct_nov'))
+            ),
+            [EventCount],
+            ,
+            DESC
+        ) <= 3
+    )
+)
